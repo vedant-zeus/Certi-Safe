@@ -9,6 +9,30 @@
       "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "uploadDate": "2026-04-21T20:07:45.048Z",
       "fileSize": 22321
+    },
+    {
+      "id": "1776876814278",
+      "title": "Cloudinary Success Test",
+      "originalName": "dummy_certificate_1776876028194.png",
+      "type": "Generic",
+      "category": "Identity",
+      "mimeType": "image/png",
+      "uploadDate": "2026-04-22T16:53:37.011Z",
+      "fileSize": 70,
+      "cloudinaryUrl": "https://res.cloudinary.com/dtectonoo/raw/upload/v1776876816/1776876814278.enc",
+      "cloudinaryPublicId": "1776876814278.enc"
+    },
+    {
+      "id": "1776878255897",
+      "title": "Team_PushPop",
+      "originalName": "Team_PushPop.pdf",
+      "type": "Generic",
+      "category": "Identity",
+      "mimeType": "application/pdf",
+      "uploadDate": "2026-04-22T17:17:40.290Z",
+      "fileSize": 1804312,
+      "cloudinaryUrl": "https://res.cloudinary.com/dtectonoo/raw/upload/v1776878259/1776878255897.enc",
+      "cloudinaryPublicId": "1776878255897.enc"
     }
   ]
 }

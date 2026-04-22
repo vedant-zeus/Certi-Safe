@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Lock, Unlock, KeyRound } from 'lucide-react';
+import KYCVerification from './KYCVerification.jsx';
 
 const VaultDoor = ({ onUnlock }) => {
   const [pin, setPin] = useState('');
   const [isError, setIsError] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [showKYC, setShowKYC] = useState(false);
 
   const handleUnlock = () => {
     setIsVerifying(true);
     // Simulate verification delay
     setTimeout(() => {
       if (pin === '1234') { // Default demo pin
-        onUnlock();
+        setIsVerifying(false);
+        setShowKYC(true); // Trigger KYC Step
       } else {
         setIsError(true);
         setIsVerifying(false);
@@ -80,6 +83,15 @@ const VaultDoor = ({ onUnlock }) => {
           )}
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {showKYC && (
+          <KYCVerification 
+            onVerified={onUnlock} 
+            onCancel={() => setShowKYC(false)} 
+          />
+        )}
+      </AnimatePresence>
 
       <style>{`
         .vault-door-container {

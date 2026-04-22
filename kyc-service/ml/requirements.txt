@@ -1,0 +1,16 @@
+# Core ML
+torch
+torchvision
+Pillow
+numpy<2.0.0
+
+# Video frame extraction
+opencv-python-headless
+
+# Inference server
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Google Drive Download
+gdown

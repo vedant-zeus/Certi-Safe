@@ -5,7 +5,16 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const { encrypt, decrypt } = require('./utils/cryptoUtils');
+const cloudinary = require('cloudinary').v2;
+const axios = require('axios');
 require('dotenv').config();
+
+// Cloudinary configuration
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,6 +43,20 @@ const upload = multer({ storage: storage });
 const getDB = () => JSON.parse(fs.readFileSync(DB_FILE));
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
+// Helper for Cloudinary upload
+const uploadToCloudinary = (buffer, publicId) => {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+            { resource_type: 'raw', public_id: publicId },
+            (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+            }
+        );
+        stream.end(buffer);
+    });
+};
+
 // --- Routes ---
 
 // 1. Get all certificates
@@ -47,20 +70,21 @@ app.get('/api/certificates', (req, res) => {
 });
 
 // 2. Upload and Encrypt
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
         const { title, type, category } = req.body;
         const fileId = Date.now().toString();
         const encryptedFilename = `${fileId}.enc`;
-        const filePath = path.join(UPLOADS_DIR, encryptedFilename);
 
         // Encrypt the buffer
         const encryptedBuffer = encrypt(req.file.buffer);
-        fs.writeFileSync(filePath, encryptedBuffer);
+        
+        // Upload to Cloudinary (pointer-based storage)
+        const cloudResult = await uploadToCloudinary(encryptedBuffer, encryptedFilename);
 
-        // Save metadata
+        // Save metadata with Cloudinary URL (the pointer)
         const newCert = {
             id: fileId,
             title: title || req.file.originalname,
@@ -69,7 +93,9 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
             category: category || 'Default',
             mimeType: req.file.mimetype,
             uploadDate: new Date().toISOString(),
-            fileSize: req.file.size
+            fileSize: req.file.size,
+            cloudinaryUrl: cloudResult.secure_url,
+            cloudinaryPublicId: cloudResult.public_id
         };
 
         const db = getDB();
@@ -79,21 +105,23 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
         res.status(201).json(newCert);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Encryption and storage failed' });
+        res.status(500).json({ error: 'Encryption or cloud storage failed' });
     }
 });
 
 // 3. Download and Decrypt
-app.get('/api/download/:id', (req, res) => {
+app.get('/api/download/:id', async (req, res) => {
     try {
         const db = getDB();
         const cert = db.certificates.find(c => c.id === req.params.id);
         if (!cert) return res.status(404).json({ error: 'Certificate not found' });
 
-        const filePath = path.join(UPLOADS_DIR, `${cert.id}.enc`);
-        if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File missing on server' });
+        if (!cert.cloudinaryUrl) return res.status(404).json({ error: 'Cloud pointer missing' });
 
-        const encryptedBuffer = fs.readFileSync(filePath);
+        // Fetch encrypted file from Cloudinary
+        const response = await axios.get(cert.cloudinaryUrl, { responseType: 'arraybuffer' });
+        const encryptedBuffer = Buffer.from(response.data);
+        
         const decryptedBuffer = decrypt(encryptedBuffer);
 
         res.setHeader('Content-Type', cert.mimeType);
@@ -101,21 +129,22 @@ app.get('/api/download/:id', (req, res) => {
         res.send(decryptedBuffer);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Decryption failed' });
+        res.status(500).json({ error: 'Decryption or cloud fetch failed' });
     }
 });
 
 // 4. Delete Certificate
-app.delete('/api/certificates/:id', (req, res) => {
+app.delete('/api/certificates/:id', async (req, res) => {
     try {
         const db = getDB();
         const index = db.certificates.findIndex(c => c.id === req.params.id);
         if (index === -1) return res.status(404).json({ error: 'Certificate not found' });
 
-        // Remove encrypted file
-        const filePath = path.join(UPLOADS_DIR, `${req.params.id}.enc`);
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
+        const cert = db.certificates[index];
+
+        // Remove from Cloudinary if publicId exists
+        if (cert.cloudinaryPublicId) {
+            await cloudinary.uploader.destroy(cert.cloudinaryPublicId, { resource_type: 'raw' });
         }
 
         db.certificates.splice(index, 1);
@@ -123,6 +152,7 @@ app.delete('/api/certificates/:id', (req, res) => {
 
         res.json({ message: 'Certificate deleted successfully' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Failed to delete certificate' });
     }
 });
